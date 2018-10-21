@@ -3,14 +3,14 @@
 use std::collections::HashMap;
 use std::fs::File;
 
-use wabt::script::{self, Action, Command, CommandKind, ScriptParser, Value};
-use wasmi::memory_units::Pages;
-use wasmi::{
+use recue_wasmi::memory_units::Pages;
+use recue_wasmi::{
   Error as InterpreterError, Externals, FuncInstance, FuncRef, GlobalDescriptor, GlobalInstance,
   GlobalRef, ImportResolver, ImportsBuilder, MemoryDescriptor, MemoryInstance, MemoryRef, Module,
   ModuleImportResolver, ModuleInstance, ModuleRef, RuntimeArgs, RuntimeValue, Signature,
   TableDescriptor, TableInstance, TableRef, Trap,
 };
+use wabt::script::{self, Action, Command, CommandKind, ScriptParser, Value};
 
 fn spec_to_runtime_value(val: Value<u32, u64>) -> RuntimeValue {
   match val {

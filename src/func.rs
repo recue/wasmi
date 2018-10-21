@@ -7,7 +7,7 @@ use std::fmt;
 use std::rc::{Rc, Weak};
 use types::ValueType;
 use value::RuntimeValue;
-use {Signature, Trap, TrapKind};
+use {BudgetedRunResult, OpsBudget, Signature, Trap, TrapKind};
 
 /// Reference to a function (See [`FuncInstance`] for details).
 ///
@@ -246,6 +246,7 @@ impl<'args> FuncInvocation<'args> {
     match &self.kind {
       &FuncInvocationKind::Internal(ref interpreter) => match interpreter.state() {
         &InterpreterState::Resumable(ref value_type) => value_type.clone(),
+        &InterpreterState::Paused => None,
         _ => None,
       },
       &FuncInvocationKind::Host { .. } => None,
@@ -264,6 +265,7 @@ impl<'args> FuncInvocation<'args> {
         }
         Ok(interpreter.start_execution(externals)?)
       }
+
       FuncInvocationKind::Host {
         ref args,
         ref mut finished,
@@ -274,6 +276,38 @@ impl<'args> FuncInvocation<'args> {
         }
         *finished = true;
         Ok(externals.invoke_index(*host_func_index, args.clone().into())?)
+      }
+    }
+  }
+
+  /// Start the invocation execution with an ops budget.
+  pub fn start_budgeted_execution<'externals, E: Externals + 'externals>(
+    &mut self,
+    externals: &'externals mut E,
+    budget: &mut OpsBudget,
+  ) -> Result<BudgetedRunResult, ResumableError> {
+    match self.kind {
+      FuncInvocationKind::Internal(ref mut interpreter) => {
+        if interpreter.state() != &InterpreterState::Initialized {
+          return Err(ResumableError::AlreadyStarted);
+        }
+
+        Ok(interpreter.start_budgeted_execution(externals, budget)?)
+      }
+
+      FuncInvocationKind::Host {
+        ref args,
+        ref mut finished,
+        ref host_func_index,
+      } => {
+        if *finished {
+          return Err(ResumableError::AlreadyStarted);
+        }
+
+        *finished = true;
+        Ok(BudgetedRunResult::RanToCompletion(
+          externals.invoke_index(*host_func_index, args.clone().into())?,
+        ))
       }
     }
   }
@@ -296,8 +330,39 @@ impl<'args> FuncInvocation<'args> {
         if !interpreter.state().is_resumable() {
           return Err(ResumableError::AlreadyStarted);
         }
+
         Ok(interpreter.resume_execution(return_val, externals)?)
       }
+
+      FuncInvocationKind::Host { .. } => {
+        return Err(ResumableError::NotResumable);
+      }
+    }
+  }
+
+  /// Resume an execution if a previous trap of Host kind happened or execution was paused.
+  ///
+  /// `return_val` must be of the value type [`resumable_value_type`], defined by the host function import. Otherwise,
+  /// `UnexpectedSignature` trap will be returned. The current invocation must also be resumable
+  /// [`is_resumable`]. Otherwise, a `NotResumable` error will be returned.
+  ///
+  /// [`resumable_value_type`]: #method.resumable_value_type
+  /// [`is_resumable`]: #method.is_resumable
+  pub fn resume_budgeted_execution<'externals, E: Externals + 'externals>(
+    &mut self,
+    return_val: Option<RuntimeValue>,
+    externals: &'externals mut E,
+    budget: &mut OpsBudget,
+  ) -> Result<BudgetedRunResult, ResumableError> {
+    match self.kind {
+      FuncInvocationKind::Internal(ref mut interpreter) => {
+        if !interpreter.state().is_resumable() {
+          return Err(ResumableError::AlreadyStarted);
+        }
+
+        Ok(interpreter.resume_budgeted_execution(return_val, externals, budget)?)
+      }
+
       FuncInvocationKind::Host { .. } => {
         return Err(ResumableError::NotResumable);
       }

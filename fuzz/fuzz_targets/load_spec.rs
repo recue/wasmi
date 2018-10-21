@@ -1,9 +1,9 @@
 #![no_main]
 #[macro_use]
 extern crate libfuzzer_sys;
+extern crate recue_wasmi;
 extern crate tempdir;
 extern crate wabt;
-extern crate wasmi;
 
 use std::fs::File;
 use std::io::Write;
@@ -41,7 +41,7 @@ fn run_spec(data: &[u8]) -> Result<(), ()> {
 }
 
 fn run_wasmi(data: &[u8]) -> Result<(), ()> {
-  let _ = wasmi::Module::from_buffer(data).map_err(|_| ())?;
+  let _ = recue_wasmi::Module::from_buffer(data).map_err(|_| ())?;
   Ok(())
 }
 

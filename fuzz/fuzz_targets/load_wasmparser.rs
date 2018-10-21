@@ -1,7 +1,7 @@
 #![no_main]
 #[macro_use]
 extern crate libfuzzer_sys;
-extern crate wasmi;
+extern crate recue_wasmi;
 extern crate wasmparser;
 
 use wasmparser::WasmDecoder;
@@ -19,7 +19,7 @@ fn run_wasmparser(data: &[u8]) -> bool {
 }
 
 fn run_wasmi(data: &[u8]) -> bool {
-  wasmi::Module::from_buffer(data).is_ok()
+  recue_wasmi::Module::from_buffer(data).is_ok()
 }
 
 fuzz_target!(|data: &[u8]| {

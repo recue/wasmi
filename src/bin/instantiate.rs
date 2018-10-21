@@ -1,10 +1,10 @@
 //! Handy utility to test whether the given module deserializes,
 //! validates and instantiates successfully.
 
-extern crate runt_wasmi;
+extern crate recue_wasmi;
 
-use runt_wasmi::memory_units::*;
-use runt_wasmi::{
+use recue_wasmi::memory_units::*;
+use recue_wasmi::{
   Error, FuncInstance, FuncRef, GlobalDescriptor, GlobalInstance, GlobalRef, ImportsBuilder,
   MemoryDescriptor, MemoryInstance, MemoryRef, Module, ModuleImportResolver, ModuleInstance,
   NopExternals, RuntimeValue, Signature, TableDescriptor, TableInstance, TableRef,

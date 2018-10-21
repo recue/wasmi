@@ -48,10 +48,10 @@
 //! # Examples
 //!
 //! ```rust
-//! extern crate wasmi;
+//! extern crate recue_wasmi;
 //! extern crate wabt;
 //!
-//! use wasmi::{ModuleInstance, ImportsBuilder, NopExternals, RuntimeValue};
+//! use recue_wasmi::{ModuleInstance, ImportsBuilder, NopExternals, RuntimeValue};
 //!
 //! fn main() {
 //!     // Parse WAT (WebAssembly Text format) into wasm bytecode.
@@ -68,7 +68,7 @@
 //!         .expect("failed to parse wat");
 //!
 //!     // Load wasm binary and prepare it for instantiation.
-//!     let module = wasmi::Module::from_buffer(&wasm_binary)
+//!     let module = recue_wasmi::Module::from_buffer(&wasm_binary)
 //!         .expect("failed to load wasm");
 //!
 //!     // Instantiate a module with empty imports and
@@ -142,6 +142,50 @@ impl error::Error for Trap {
   fn description(&self) -> &str {
     "runtime trap"
   }
+}
+
+/// Ops budget, used to limit number
+/// of operations a interpreter loop
+/// can execute.
+#[derive(PartialEq, Clone)]
+pub enum OpsBudget {
+  /// Don't limit the number of ops.
+  Unlimited,
+
+  /// Limit to a certain number of ops
+  Limited(i64),
+}
+
+impl OpsBudget {
+  fn budget_instruction(&mut self) -> bool {
+    match self {
+      &mut OpsBudget::Unlimited => true,
+      &mut OpsBudget::Limited(ref mut n) => if *n > 0 {
+        *n -= 1;
+        true
+      } else {
+        false
+      },
+    }
+  }
+}
+
+impl fmt::Debug for OpsBudget {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      OpsBudget::Unlimited => write!(f, "Ops budget: unlimited"),
+      OpsBudget::Limited(ref n) => write!(f, "Ops budget: max {} ops", n),
+    }
+  }
+}
+
+/// Result of running a function with a ops budget.
+pub enum BudgetedRunResult {
+  /// Ran to completion
+  RanToCompletion(Option<RuntimeValue>),
+
+  /// Ran out of ops
+  Paused,
 }
 
 /// Error type which can be thrown by wasm code or by host environment.
@@ -412,7 +456,7 @@ impl Module {
   ///
   /// ```rust
   /// extern crate parity_wasm;
-  /// extern crate wasmi;
+  /// extern crate recue_wasmi;
   ///
   /// use parity_wasm::builder;
   /// use parity_wasm::elements;
@@ -426,7 +470,7 @@ impl Module {
   ///             .build()
   ///         .build();
   ///
-  ///     let module = wasmi::Module::from_parity_wasm_module(parity_module)
+  ///     let module = recue_wasmi::Module::from_parity_wasm_module(parity_module)
   ///         .expect("parity-wasm builder generated invalid module!");
   ///
   ///     // Instantiate `module`, etc...
@@ -448,7 +492,7 @@ impl Module {
   /// # Examples
   ///
   /// ```rust
-  /// # extern crate wasmi;
+  /// # extern crate recue_wasmi;
   /// # extern crate wabt;
   ///
   /// let wasm_binary: Vec<u8> =
@@ -464,7 +508,7 @@ impl Module {
   ///     .expect("failed to parse wat");
   ///
   /// // Load wasm binary and prepare it for instantiation.
-  /// let module = wasmi::Module::from_buffer(&wasm_binary).expect("Parsing failed");
+  /// let module = recue_wasmi::Module::from_buffer(&wasm_binary).expect("Parsing failed");
   /// assert!(module.deny_floating_point().is_ok());
   ///
   /// let wasm_binary: Vec<u8> =
@@ -479,7 +523,7 @@ impl Module {
   ///     )
   ///     .expect("failed to parse wat");
   ///
-  /// let module = wasmi::Module::from_buffer(&wasm_binary).expect("Parsing failed");
+  /// let module = recue_wasmi::Module::from_buffer(&wasm_binary).expect("Parsing failed");
   /// assert!(module.deny_floating_point().is_err());
   ///
   /// let wasm_binary: Vec<u8> =
@@ -492,7 +536,7 @@ impl Module {
   ///     )
   ///     .expect("failed to parse wat");
   ///
-  /// let module = wasmi::Module::from_buffer(&wasm_binary).expect("Parsing failed");
+  /// let module = recue_wasmi::Module::from_buffer(&wasm_binary).expect("Parsing failed");
   /// assert!(module.deny_floating_point().is_err());
   /// ```
   pub fn deny_floating_point(&self) -> Result<(), Error> {
@@ -511,11 +555,11 @@ impl Module {
   /// # Examples
   ///
   /// ```rust
-  /// extern crate wasmi;
+  /// extern crate recue_wasmi;
   ///
   /// fn main() {
   ///     let module =
-  ///         wasmi::Module::from_buffer(
+  ///         recue_wasmi::Module::from_buffer(
   ///             // Minimal module:
   ///             //   \0asm - magic
   ///             //    0x01 - version (in little-endian)

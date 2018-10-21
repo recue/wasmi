@@ -1,9 +1,9 @@
 use memory_units::Pages;
 use std::fs::File;
 use {
-  Error, FuncRef, GlobalDescriptor, GlobalInstance, GlobalRef, ImportsBuilder, MemoryDescriptor,
-  MemoryInstance, MemoryRef, Module, ModuleImportResolver, ModuleInstance, NopExternals,
-  RuntimeValue, Signature, TableDescriptor, TableInstance, TableRef,
+  BudgetedRunResult, Error, FuncRef, GlobalDescriptor, GlobalInstance, GlobalRef, ImportsBuilder,
+  MemoryDescriptor, MemoryInstance, MemoryRef, Module, ModuleImportResolver, ModuleInstance,
+  NopExternals, OpsBudget, RuntimeValue, Signature, TableDescriptor, TableInstance, TableRef,
 };
 
 struct Env {
@@ -108,6 +108,55 @@ fn interpreter_inc_i32() {
     .invoke_export(FUNCTION_NAME, args, &mut NopExternals)
     .expect("");
   assert_eq!(exp_retval, retval);
+}
+
+#[test]
+fn interpreter_ops_budget() {
+  // Name of function contained in WASM file (note the leading underline)
+  const FUNCTION_NAME: &'static str = "_inc_i32";
+  // The WASM file containing the module and function
+  const WASM_FILE: &str = &"res/fixtures/inc_i32.wast";
+
+  let module = load_from_file(WASM_FILE);
+
+  let env = Env::new();
+
+  let instance = ModuleInstance::new(&module, &ImportsBuilder::new().with_resolver("env", &env))
+    .expect("Failed to instantiate module")
+    .assert_no_start();
+
+  let i32_val = 42;
+  // the functions expects a single i32 parameter
+  let args = &[RuntimeValue::I32(i32_val)];
+  let exp_retval = Some(RuntimeValue::I32(i32_val + 1));
+
+  let mut invocation = instance
+    .invoke_export_resumable(FUNCTION_NAME, args)
+    .expect("Failed to invoke export resumably");
+
+  let initial_budget = OpsBudget::Limited(2);
+  let empty_budget = OpsBudget::Limited(0);
+  let mut budget = initial_budget.clone();
+  let mut run_result = invocation
+    .start_budgeted_execution(&mut NopExternals, &mut budget)
+    .expect("Failed to start budgeted execution");
+
+  loop {
+    match run_result {
+      BudgetedRunResult::RanToCompletion(retval) => {
+        assert_eq!(exp_retval, retval);
+        return;
+      }
+
+      BudgetedRunResult::Paused => {
+        assert_eq!(empty_budget, budget);
+        budget = initial_budget.clone();
+        run_result = invocation
+          .resume_budgeted_execution(None, &mut NopExternals, &mut budget)
+          .expect("Failed to resume budgeted execution");
+      }
+    }
+  }
 }
 
 #[test]

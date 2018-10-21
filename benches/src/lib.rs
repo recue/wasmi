@@ -1,14 +1,14 @@
 #![feature(test)]
 
+extern crate recue_wasmi;
 extern crate test;
-extern crate wasmi;
 #[macro_use]
 extern crate assert_matches;
 extern crate wabt;
 
+use recue_wasmi::{ImportsBuilder, Module, ModuleInstance, NopExternals, RuntimeValue};
 use std::error;
 use std::fs::File;
-use wasmi::{ImportsBuilder, Module, ModuleInstance, NopExternals, RuntimeValue};
 
 use test::Bencher;
 

@@ -16,7 +16,7 @@ use value::{
   ArithmeticOps, ExtendInto, Float, FromRuntimeValue, Integer, LittleEndianConvert, RuntimeValue,
   TransmuteInto, TryTruncateInto, WrapInto,
 };
-use {Error, Signature, Trap, TrapKind};
+use {BudgetedRunResult, Error, OpsBudget, Signature, Trap, TrapKind};
 
 /// Maximum number of entries in value stack.
 pub const DEFAULT_VALUE_STACK_LIMIT: usize = (1024 * 1024) / ::std::mem::size_of::<RuntimeValue>();
@@ -43,6 +43,8 @@ pub enum InterpreterState {
   Initialized,
   /// The interpreter has started execution, and cannot be called again if it exits normally, or no Host traps happened.
   Started,
+  /// The interpreter has run out of it's ops budget, and has been paused
+  Paused,
   /// The interpreter has been executed, and returned a Host trap. It can resume execution by providing back a return
   /// value.
   Resumable(Option<ValueType>),
@@ -52,6 +54,7 @@ impl InterpreterState {
   pub fn is_resumable(&self) -> bool {
     match self {
       &InterpreterState::Resumable(_) => true,
+      &InterpreterState::Paused => true,
       _ => false,
     }
   }
@@ -61,6 +64,10 @@ impl InterpreterState {
 enum RunResult {
   /// Function has returned.
   Return,
+
+  /// Function was paused (ran out of ops).
+  Pause,
+
   /// Function is calling other function.
   NestedCall(FuncRef),
 }
@@ -109,8 +116,10 @@ impl Interpreter {
     // Ensure that the VM has not been executed. This is checked in `FuncInvocation::start_execution`.
     assert!(self.state == InterpreterState::Initialized);
 
+    let mut budget = OpsBudget::Unlimited;
     self.state = InterpreterState::Started;
-    self.run_interpreter_loop(externals)?;
+    self.run_interpreter_loop(externals, &mut budget)?;
+    self.assert_not_paused()?;
 
     let opt_return_value = self.return_type.map(|_vt| self.value_stack.pop());
 
@@ -118,6 +127,29 @@ impl Interpreter {
     assert!(self.value_stack.len() == 0);
 
     Ok(opt_return_value)
+  }
+
+  pub fn start_budgeted_execution<'a, E: Externals + 'a>(
+    &mut self,
+    externals: &'a mut E,
+    budget: &mut OpsBudget,
+  ) -> Result<BudgetedRunResult, Trap> {
+    // Ensure that the VM has not been executed. This is checked in `FuncInvocation::start_execution`.
+    assert!(self.state == InterpreterState::Initialized);
+
+    self.state = InterpreterState::Started;
+    self.run_interpreter_loop(externals, budget)?;
+    match self.state {
+      InterpreterState::Paused => Ok(BudgetedRunResult::Paused),
+      _ => {
+        let opt_return_value = self.return_type.map(|_vt| self.value_stack.pop());
+
+        // Ensure that stack is empty after the execution. This is guaranteed by the validation properties.
+        assert!(self.value_stack.len() == 0);
+
+        Ok(BudgetedRunResult::RanToCompletion(opt_return_value))
+      }
+    }
   }
 
   pub fn resume_execution<'a, E: Externals + 'a>(
@@ -134,6 +166,7 @@ impl Interpreter {
     swap(&mut self.state, &mut resumable_state);
     let expected_ty = match resumable_state {
       InterpreterState::Resumable(ty) => ty,
+      InterpreterState::Paused => None,
       _ => unreachable!("Resumable arm is checked above is_resumable; qed"),
     };
 
@@ -146,7 +179,9 @@ impl Interpreter {
       self.value_stack.push(return_val).map_err(Trap::new)?;
     }
 
-    self.run_interpreter_loop(externals)?;
+    let mut budget = OpsBudget::Unlimited;
+    self.run_interpreter_loop(externals, &mut budget)?;
+    self.assert_not_paused()?;
 
     let opt_return_value = self.return_type.map(|_vt| self.value_stack.pop());
 
@@ -156,9 +191,59 @@ impl Interpreter {
     Ok(opt_return_value)
   }
 
+  pub fn resume_budgeted_execution<'a, E: Externals + 'a>(
+    &mut self,
+    return_val: Option<RuntimeValue>,
+    externals: &'a mut E,
+    budget: &mut OpsBudget,
+  ) -> Result<BudgetedRunResult, Trap> {
+    use std::mem::swap;
+
+    // Ensure that the VM is resumable. This is checked in `FuncInvocation::resume_execution`.
+    assert!(self.state.is_resumable());
+
+    let mut resumable_state = InterpreterState::Started;
+    swap(&mut self.state, &mut resumable_state);
+    let expected_ty = match resumable_state {
+      InterpreterState::Resumable(ty) => ty,
+      InterpreterState::Paused => None,
+      _ => unreachable!("Resumable arm is checked above is_resumable; qed"),
+    };
+
+    let value_ty = return_val.as_ref().map(|val| val.value_type());
+    if value_ty != expected_ty {
+      return Err(TrapKind::UnexpectedSignature.into());
+    }
+
+    if let Some(return_val) = return_val {
+      self.value_stack.push(return_val).map_err(Trap::new)?;
+    }
+
+    self.run_interpreter_loop(externals, budget)?;
+    match self.state {
+      InterpreterState::Paused => Ok(BudgetedRunResult::Paused),
+      _ => {
+        let opt_return_value = self.return_type.map(|_vt| self.value_stack.pop());
+
+        // Ensure that stack is empty after the execution. This is guaranteed by the validation properties.
+        assert!(self.value_stack.len() == 0);
+
+        Ok(BudgetedRunResult::RanToCompletion(opt_return_value))
+      }
+    }
+  }
+
+  fn assert_not_paused(&self) -> Result<(), Trap> {
+    match self.state {
+      InterpreterState::Paused => Err(Trap::new(TrapKind::Unreachable)),
+      _ => Ok(()),
+    }
+  }
+
   fn run_interpreter_loop<'a, E: Externals + 'a>(
     &mut self,
     externals: &'a mut E,
+    budget: &mut OpsBudget,
   ) -> Result<(), Trap> {
     loop {
       let mut function_context = self
@@ -178,7 +263,7 @@ impl Interpreter {
       }
 
       let function_return = self
-        .do_run_function(&mut function_context, &function_body.code)
+        .do_run_function(&mut function_context, &function_body.code, budget)
         .map_err(Trap::new)?;
 
       match function_return {
@@ -189,6 +274,13 @@ impl Interpreter {
             return Ok(());
           }
         }
+
+        RunResult::Pause => {
+          self.state = InterpreterState::Paused;
+          self.call_stack.push(function_context);
+          return Ok(());
+        }
+
         RunResult::NestedCall(nested_func) => {
           if self.call_stack.len() + 1 >= DEFAULT_CALL_STACK_LIMIT {
             return Err(TrapKind::StackOverflow.into());
@@ -236,9 +328,15 @@ impl Interpreter {
     &mut self,
     function_context: &mut FunctionContext,
     instructions: &isa::Instructions,
+    budget: &mut OpsBudget,
   ) -> Result<RunResult, TrapKind> {
     let mut iter = instructions.iterate_from(function_context.position);
     loop {
+      if !budget.budget_instruction() {
+        function_context.position = iter.position();
+        return Ok(RunResult::Pause);
+      };
+
       let instruction = iter.next().expect("instruction");
 
       match self.run_instruction(function_context, instruction)? {

@@ -1,5 +1,5 @@
 use common::{DEFAULT_MEMORY_INDEX, DEFAULT_TABLE_INDEX};
-use func::{FuncBody, FuncInstance, FuncRef};
+use func::{FuncBody, FuncInstance, FuncInvocation, FuncRef};
 use global::{GlobalInstance, GlobalRef};
 use host::Externals;
 use imports::ImportResolver;
@@ -473,9 +473,9 @@ impl ModuleInstance {
   /// # Examples
   ///
   /// ```rust
-  /// use wasmi::{ModuleInstance, ImportsBuilder, NopExternals};
-  /// # fn func() -> Result<(), ::wasmi::Error> {
-  /// # let module = wasmi::Module::from_buffer(&[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]).unwrap();
+  /// use recue_wasmi::{ModuleInstance, ImportsBuilder, NopExternals};
+  /// # fn func() -> Result<(), ::recue_wasmi::Error> {
+  /// # let module = recue_wasmi::Module::from_buffer(&[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]).unwrap();
   ///
   /// // ModuleInstance::new returns instance which `start` function isn't called.
   /// let not_started = ModuleInstance::new(
@@ -493,9 +493,9 @@ impl ModuleInstance {
   /// instantiated module without calling `start` function.
   ///
   /// ```rust
-  /// use wasmi::{ModuleInstance, ImportsBuilder, NopExternals};
-  /// # fn func() -> Result<(), ::wasmi::Error> {
-  /// # let module = wasmi::Module::from_buffer(&[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]).unwrap();
+  /// use recue_wasmi::{ModuleInstance, ImportsBuilder, NopExternals};
+  /// # fn func() -> Result<(), ::recue_wasmi::Error> {
+  /// # let module = recue_wasmi::Module::from_buffer(&[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]).unwrap();
   ///
   /// // This will panic if the module actually contain `start` function.
   /// let not_started = ModuleInstance::new(
@@ -571,9 +571,9 @@ impl ModuleInstance {
   /// Invoke a function that takes two numbers and returns sum of them.
   ///
   /// ```rust
-  /// # extern crate wasmi;
+  /// # extern crate recue_wasmi;
   /// # extern crate wabt;
-  /// # use wasmi::{ModuleInstance, ImportsBuilder, NopExternals, RuntimeValue};
+  /// # use recue_wasmi::{ModuleInstance, ImportsBuilder, NopExternals, RuntimeValue};
   /// # fn main() {
   /// # let wasm_binary: Vec<u8> = wabt::wat2wasm(
   /// #   r#"
@@ -586,7 +586,7 @@ impl ModuleInstance {
   /// #   )
   /// #   "#,
   /// # ).expect("failed to parse wat");
-  /// # let module = wasmi::Module::from_buffer(&wasm_binary).expect("failed to load wasm");
+  /// # let module = recue_wasmi::Module::from_buffer(&wasm_binary).expect("failed to load wasm");
   /// # let instance = ModuleInstance::new(
   /// # &module,
   /// # &ImportsBuilder::default()
@@ -623,6 +623,41 @@ impl ModuleInstance {
 
     check_function_args(func_instance.signature(), &args)?;
     FuncInstance::invoke(&func_instance, args, externals).map_err(|t| Error::Trap(t))
+  }
+
+  /// Invoke exported function by a name.
+  ///
+  /// This function finds exported function by a name, and calls it with provided arguments and
+  /// external state.
+  ///
+  /// # Errors
+  ///
+  /// Returns `Err` if:
+  ///
+  /// - there are no export with a given name or this export is not a function,
+  /// - given arguments doesn't match to function signature,
+  /// - trap occurred at the execution time,
+  pub fn invoke_export_resumable<'args>(
+    &self,
+    func_name: &str,
+    args: &'args [RuntimeValue],
+  ) -> Result<FuncInvocation<'args>, Error> {
+    let extern_val = self
+      .export_by_name(func_name)
+      .ok_or_else(|| Error::Function(format!("Module doesn't have export {}", func_name)))?;
+
+    let func_instance = match extern_val {
+      ExternVal::Func(func_instance) => func_instance,
+      unexpected => {
+        return Err(Error::Function(format!(
+          "Export {} is not a function, but {:?}",
+          func_name, unexpected
+        )));
+      }
+    };
+
+    check_function_args(func_instance.signature(), &args)?;
+    FuncInstance::invoke_resumable(&func_instance, args).map_err(|t| Error::Trap(t))
   }
 
   /// Find export by a name.
