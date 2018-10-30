@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
 use common::{DEFAULT_MEMORY_INDEX, DEFAULT_TABLE_INDEX};
+use core::u32;
 use parity_wasm::elements::{BlockType, Func, FuncBody, Instruction, TableElementType, ValueType};
-use std::u32;
 use validation::context::ModuleContext;
 
 use validation::util::Locals;
@@ -1805,7 +1807,7 @@ impl Sink {
   }
 
   fn emit_br_table(&mut self, targets: &[Target], default: Target) {
-    use std::iter;
+    use core::iter;
 
     let pc = self.cur_pc();
     let mut isa_targets = Vec::new();
@@ -1834,7 +1836,7 @@ impl Sink {
   ///
   /// Panics if the label is already resolved.
   fn resolve_label(&mut self, label: LabelId) {
-    use std::mem;
+    use core::mem;
 
     if let (Label::Resolved(_), _) = self.labels[label.0] {
       panic!("Trying to resolve already resolved label");

@@ -1,13 +1,15 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
+use alloc::rc::{Rc, Weak};
+use core::fmt;
 use host::Externals;
 use isa;
 use module::ModuleInstance;
 use parity_wasm::elements::Local;
 use runner::{check_function_args, Interpreter, InterpreterState};
-use std::fmt;
-use std::rc::{Rc, Weak};
 use types::ValueType;
 use value::RuntimeValue;
-use {BudgetedRunResult, OpsBudget, Signature, Trap, TrapKind};
+use {BudgetedRunResult, OpsBudget, Signature, Trap};
 
 /// Reference to a function (See [`FuncInstance`] for details).
 ///
@@ -17,7 +19,7 @@ use {BudgetedRunResult, OpsBudget, Signature, Trap, TrapKind};
 #[derive(Clone, Debug)]
 pub struct FuncRef(Rc<FuncInstance>);
 
-impl ::std::ops::Deref for FuncRef {
+impl ::core::ops::Deref for FuncRef {
   type Target = FuncInstance;
   fn deref(&self) -> &FuncInstance {
     &self.0
@@ -135,7 +137,7 @@ impl FuncInstance {
     args: &[RuntimeValue],
     externals: &mut E,
   ) -> Result<Option<RuntimeValue>, Trap> {
-    check_function_args(func.signature(), &args).map_err(|_| TrapKind::UnexpectedSignature)?;
+    check_function_args(func.signature(), &args)?;
     match *func.as_internal() {
       FuncInstanceInternal::Internal { .. } => {
         let mut interpreter = Interpreter::new(func, args)?;
@@ -166,7 +168,7 @@ impl FuncInstance {
     func: &FuncRef,
     args: &'args [RuntimeValue],
   ) -> Result<FuncInvocation<'args>, Trap> {
-    check_function_args(func.signature(), &args).map_err(|_| TrapKind::UnexpectedSignature)?;
+    check_function_args(func.signature(), &args)?;
     match *func.as_internal() {
       FuncInstanceInternal::Internal { .. } => {
         let interpreter = Interpreter::new(func, args)?;

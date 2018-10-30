@@ -1,8 +1,15 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
+
+#[cfg(not(feature = "std"))]
+use hashmap_core::HashMap;
+#[cfg(feature = "std")]
+use std::collections::HashMap;
+
 use func::FuncRef;
 use global::GlobalRef;
 use memory::MemoryRef;
 use module::ModuleRef;
-use std::collections::HashMap;
 use table::TableRef;
 use types::{GlobalDescriptor, MemoryDescriptor, TableDescriptor};
 use {Error, Signature};

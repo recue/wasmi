@@ -1,11 +1,13 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
+use alloc::rc::Rc;
+use core::cell::{Cell, RefCell};
+use core::cmp;
+use core::fmt;
+use core::ops::Range;
+use core::u32;
 use memory_units::{Bytes, Pages, RoundUpTo};
 use parity_wasm::elements::ResizableLimits;
-use std::cell::{Cell, RefCell};
-use std::cmp;
-use std::fmt;
-use std::ops::Range;
-use std::rc::Rc;
-use std::u32;
 use value::LittleEndianConvert;
 use Error;
 
@@ -28,7 +30,7 @@ const LINEAR_MEMORY_MAX_PAGES: Pages = Pages(65536);
 #[derive(Clone, Debug)]
 pub struct MemoryRef(Rc<MemoryInstance>);
 
-impl ::std::ops::Deref for MemoryRef {
+impl ::core::ops::Deref for MemoryRef {
   type Target = MemoryInstance;
   fn deref(&self) -> &MemoryInstance {
     &self.0
@@ -172,7 +174,7 @@ impl MemoryInstance {
   /// Get value from memory at given offset.
   pub fn get_value<T: LittleEndianConvert>(&self, offset: u32) -> Result<T, Error> {
     let mut buffer = self.buffer.borrow_mut();
-    let region = self.checked_region(&mut buffer, offset as usize, ::std::mem::size_of::<T>())?;
+    let region = self.checked_region(&mut buffer, offset as usize, ::core::mem::size_of::<T>())?;
     Ok(T::from_little_endian(&buffer[region.range()]).expect("Slice size is checked"))
   }
 
@@ -219,7 +221,7 @@ impl MemoryInstance {
   pub fn set_value<T: LittleEndianConvert>(&self, offset: u32, value: T) -> Result<(), Error> {
     let mut buffer = self.buffer.borrow_mut();
     let range = self
-      .checked_region(&mut buffer, offset as usize, ::std::mem::size_of::<T>())?
+      .checked_region(&mut buffer, offset as usize, ::core::mem::size_of::<T>())?
       .range();
     value.into_little_endian(&mut buffer[range]);
     Ok(())
@@ -264,7 +266,7 @@ impl MemoryInstance {
     size: usize,
   ) -> Result<CheckedRegion, Error>
   where
-    B: ::std::ops::DerefMut<Target = Vec<u8>>,
+    B: ::core::ops::DerefMut<Target = Vec<u8>>,
   {
     let end = offset.checked_add(size).ok_or_else(|| {
       Error::Memory(format!(
@@ -301,7 +303,7 @@ impl MemoryInstance {
     size2: usize,
   ) -> Result<(CheckedRegion, CheckedRegion), Error>
   where
-    B: ::std::ops::DerefMut<Target = Vec<u8>>,
+    B: ::core::ops::DerefMut<Target = Vec<u8>>,
   {
     let end1 = offset1.checked_add(size1).ok_or_else(|| {
       Error::Memory(format!(
@@ -366,9 +368,9 @@ impl MemoryInstance {
       self.checked_region_pair(&mut buffer, src_offset, len, dst_offset, len)?;
 
     unsafe {
-      ::std::ptr::copy(
+      ::core::ptr::copy(
         buffer[read_region.range()].as_ptr(),
-        buffer[write_region.range()].as_ptr() as *mut _,
+        buffer[write_region.range()].as_mut_ptr(),
         len,
       )
     }
@@ -405,9 +407,9 @@ impl MemoryInstance {
     }
 
     unsafe {
-      ::std::ptr::copy_nonoverlapping(
+      ::core::ptr::copy_nonoverlapping(
         buffer[read_region.range()].as_ptr(),
-        buffer[write_region.range()].as_ptr() as *mut _,
+        buffer[write_region.range()].as_mut_ptr(),
         len,
       )
     }

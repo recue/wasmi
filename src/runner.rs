@@ -1,4 +1,10 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
 use common::{DEFAULT_MEMORY_INDEX, DEFAULT_TABLE_INDEX};
+use core::fmt;
+use core::iter::repeat;
+use core::ops;
+use core::{u32, usize};
 use func::{FuncInstance, FuncInstanceInternal, FuncRef};
 use host::Externals;
 use isa;
@@ -7,19 +13,15 @@ use memory_units::Pages;
 use module::ModuleRef;
 use nan_preserving_float::{F32, F64};
 use parity_wasm::elements::Local;
-use std::fmt;
-use std::iter::repeat;
-use std::ops;
-use std::{u32, usize};
 use types::ValueType;
 use value::{
   ArithmeticOps, ExtendInto, Float, FromRuntimeValue, Integer, LittleEndianConvert, RuntimeValue,
   TransmuteInto, TryTruncateInto, WrapInto,
 };
-use {BudgetedRunResult, Error, OpsBudget, Signature, Trap, TrapKind};
+use {BudgetedRunResult, OpsBudget, Signature, Trap, TrapKind};
 
 /// Maximum number of entries in value stack.
-pub const DEFAULT_VALUE_STACK_LIMIT: usize = (1024 * 1024) / ::std::mem::size_of::<RuntimeValue>();
+pub const DEFAULT_VALUE_STACK_LIMIT: usize = (1024 * 1024) / ::core::mem::size_of::<RuntimeValue>();
 
 // TODO: Make these parameters changeble.
 pub const DEFAULT_CALL_STACK_LIMIT: usize = 64 * 1024;
@@ -157,7 +159,7 @@ impl Interpreter {
     return_val: Option<RuntimeValue>,
     externals: &'a mut E,
   ) -> Result<Option<RuntimeValue>, Trap> {
-    use std::mem::swap;
+    use core::mem::swap;
 
     // Ensure that the VM is resumable. This is checked in `FuncInvocation::resume_execution`.
     assert!(self.state.is_resumable());
@@ -197,7 +199,7 @@ impl Interpreter {
     externals: &'a mut E,
     budget: &mut OpsBudget,
   ) -> Result<BudgetedRunResult, Trap> {
-    use std::mem::swap;
+    use core::mem::swap;
 
     // Ensure that the VM is resumable. This is checked in `FuncInvocation::resume_execution`.
     assert!(self.state.is_resumable());
@@ -1320,30 +1322,21 @@ fn prepare_function_args(
   args
 }
 
-pub fn check_function_args(signature: &Signature, args: &[RuntimeValue]) -> Result<(), Error> {
+pub fn check_function_args(signature: &Signature, args: &[RuntimeValue]) -> Result<(), Trap> {
   if signature.params().len() != args.len() {
-    return Err(Error::Function(format!(
-      "not enough arguments, given {} but expected: {}",
-      args.len(),
-      signature.params().len(),
-    )));
+    return Err(TrapKind::UnexpectedSignature.into());
   }
 
-  signature
+  if signature
     .params()
     .iter()
-    .cloned()
     .zip(args)
-    .map(|(expected_type, param_value)| {
+    .any(|(expected_type, param_value)| {
       let actual_type = param_value.value_type();
-      if actual_type != expected_type {
-        return Err(Error::Function(format!(
-          "invalid parameter type {:?} when expected {:?}",
-          actual_type, expected_type
-        )));
-      }
-      Ok(())
-    }).collect::<Result<Vec<_>, _>>()?;
+      &actual_type != expected_type
+    }) {
+    return Err(TrapKind::UnexpectedSignature.into());
+  }
 
   Ok(())
 }

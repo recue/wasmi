@@ -1,6 +1,6 @@
+use alloc::rc::Rc;
+use core::cell::Cell;
 use parity_wasm::elements::ValueType as EValueType;
-use std::cell::Cell;
-use std::rc::Rc;
 use types::ValueType;
 use value::RuntimeValue;
 use Error;
@@ -13,7 +13,7 @@ use Error;
 #[derive(Clone, Debug)]
 pub struct GlobalRef(Rc<GlobalInstance>);
 
-impl ::std::ops::Deref for GlobalRef {
+impl ::core::ops::Deref for GlobalRef {
   type Target = GlobalInstance;
   fn deref(&self) -> &GlobalInstance {
     &self.0

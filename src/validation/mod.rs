@@ -1,3 +1,14 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
+use core::fmt;
+#[cfg(feature = "std")]
+use std::error;
+
+#[cfg(not(feature = "std"))]
+use hashmap_core::HashSet;
+#[cfg(feature = "std")]
+use std::collections::HashSet;
+
 use self::context::ModuleContextBuilder;
 use self::func::FunctionReader;
 use common::stack;
@@ -7,9 +18,6 @@ use parity_wasm::elements::{
   BlockType, External, GlobalEntry, GlobalType, InitExpr, Instruction, Internal, MemoryType,
   Module, ResizableLimits, TableType, Type, ValueType,
 };
-use std::collections::HashSet;
-use std::error;
-use std::fmt;
 
 mod context;
 mod func;
@@ -27,6 +35,7 @@ impl fmt::Display for Error {
   }
 }
 
+#[cfg(feature = "std")]
 impl error::Error for Error {
   fn description(&self) -> &str {
     &self.0
@@ -45,7 +54,7 @@ pub struct ValidatedModule {
   pub module: Module,
 }
 
-impl ::std::ops::Deref for ValidatedModule {
+impl ::core::ops::Deref for ValidatedModule {
   type Target = Module;
   fn deref(&self) -> &Module {
     &self.module

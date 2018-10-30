@@ -1,5 +1,9 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
+
+use core::fmt;
+#[cfg(feature = "std")]
 use std::error;
-use std::fmt;
 
 #[derive(Debug)]
 pub struct Error(String);
@@ -10,6 +14,7 @@ impl fmt::Display for Error {
   }
 }
 
+#[cfg(feature = "std")]
 impl error::Error for Error {
   fn description(&self) -> &str {
     &self.0

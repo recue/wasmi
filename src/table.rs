@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use core::fmt;
+use core::u32;
 use func::FuncRef;
 use module::check_limits;
 use parity_wasm::elements::ResizableLimits;
-use std::cell::RefCell;
-use std::fmt;
-use std::rc::Rc;
-use std::u32;
 use Error;
 
 /// Reference to a table (See [`TableInstance`] for details).
@@ -16,7 +18,7 @@ use Error;
 #[derive(Clone, Debug)]
 pub struct TableRef(Rc<TableInstance>);
 
-impl ::std::ops::Deref for TableRef {
+impl ::core::ops::Deref for TableRef {
   type Target = TableInstance;
   fn deref(&self) -> &TableInstance {
     &self.0

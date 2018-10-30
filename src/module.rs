@@ -1,3 +1,15 @@
+#[allow(unused_imports)]
+use alloc::prelude::*;
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use core::fmt;
+use Trap;
+
+#[cfg(not(feature = "std"))]
+use hashmap_core::HashMap;
+#[cfg(feature = "std")]
+use std::collections::HashMap;
+
 use common::{DEFAULT_MEMORY_INDEX, DEFAULT_TABLE_INDEX};
 use func::{FuncBody, FuncInstance, FuncInvocation, FuncRef};
 use global::{GlobalInstance, GlobalRef};
@@ -6,14 +18,8 @@ use imports::ImportResolver;
 use memory::MemoryRef;
 use memory_units::Pages;
 use parity_wasm::elements::{External, InitExpr, Instruction, Internal, ResizableLimits, Type};
-use runner::check_function_args;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::fmt;
-use std::rc::Rc;
 use table::TableRef;
 use types::{GlobalDescriptor, MemoryDescriptor, TableDescriptor};
-use Trap;
 use {Error, MemoryInstance, Module, RuntimeValue, Signature, TableInstance};
 
 /// Reference to a [`ModuleInstance`].
@@ -32,7 +38,7 @@ use {Error, MemoryInstance, Module, RuntimeValue, Signature, TableInstance};
 #[derive(Clone, Debug)]
 pub struct ModuleRef(pub(crate) Rc<ModuleInstance>);
 
-impl ::std::ops::Deref for ModuleRef {
+impl ::core::ops::Deref for ModuleRef {
   type Target = ModuleInstance;
   fn deref(&self) -> &ModuleInstance {
     &self.0
@@ -621,7 +627,6 @@ impl ModuleInstance {
       }
     };
 
-    check_function_args(func_instance.signature(), &args)?;
     FuncInstance::invoke(&func_instance, args, externals).map_err(|t| Error::Trap(t))
   }
 
@@ -656,7 +661,6 @@ impl ModuleInstance {
       }
     };
 
-    check_function_args(func_instance.signature(), &args)?;
     FuncInstance::invoke_resumable(&func_instance, args).map_err(|t| Error::Trap(t))
   }
 
